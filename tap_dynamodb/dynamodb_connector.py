@@ -1,5 +1,7 @@
 """DynamoDB connector class."""
 
+import sys
+
 import genson
 import orjson
 from botocore.exceptions import ClientError
@@ -59,7 +61,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             user_logger.error(
                 f"Couldn't list tables. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
             )
-            raise
+            sys.exit(1)
         else:
             return tables
 
@@ -84,7 +86,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             user_logger.error(
                 f"Couldn't scan for {table_name}. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
             )
-            raise
+            sys.exit(1)
 
     def _get_sample_records(self, table_name: str, sample_size: int, scan_kwargs_override: dict) -> list:
         scan_kwargs = scan_kwargs_override.copy()
@@ -117,12 +119,12 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             self._recursively_drop_required(schema)
             if not schema:
                 user_logger.error("Inferring schema failed.")
-                raise Exception("Inferring schema failed.")
+                sys.exit(1)
             else:
                 user_logger.info(f"Inferring schema successful for table: '{table_name}'.")
         else:
             user_logger.error(f"Strategy {strategy} not supported.")
-            raise Exception(f"Strategy {strategy} not supported.")
+            sys.exit(1)
         return schema
 
     def get_table_key_properties(self, table_name):

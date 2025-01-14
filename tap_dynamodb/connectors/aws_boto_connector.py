@@ -2,19 +2,16 @@
 
 import logging
 import os
+import sys
 import typing as t
 
+import boto3
 import boto3.session
 from boto3.resources.base import ServiceResource
 from boto3.session import Session
 from botocore.client import BaseClient
 from custom_logger import user_logger
 from singer_sdk import typing as th
-
-try:
-    import boto3
-except ImportError:
-    raise Exception("boto3 is required for this authenticator. Please install it with `poetry add boto3`.")
 
 if t.TYPE_CHECKING:
     from mypy_boto3_sts import STSClient

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 import typing as t
 
+from custom_logger import user_logger
 from singer_sdk.streams import Stream
 
 if t.TYPE_CHECKING:
@@ -33,18 +35,12 @@ class TableStream(Stream):
             dynamodb_conn: The DynamoDbConnector object.
             infer_schema_sample_size: The amount of records to sample when
                 inferring the schema.
-
-        Raises:
-            Exception: If an input catalog is provided and the table is
-                not found in it.
         """
         self._dynamodb_conn: DynamoDbConnector = dynamodb_conn
         self._table_name: str = name
         self._schema: dict = {}
         self._infer_schema_sample_size = infer_schema_sample_size
-        self._table_scan_kwargs: dict = tap.config.get("table_scan_kwargs", {}).get(
-            name, {}
-        )
+        self._table_scan_kwargs: dict = tap.config.get("table_scan_kwargs", {}).get(name, {})
         if tap.input_catalog:
             catalog_entry = tap.input_catalog.get(name)
             if catalog_entry:
@@ -54,10 +50,11 @@ class TableStream(Stream):
                     schema=catalog_entry.to_dict().get("schema"),
                 )
             else:
-                raise Exception(
+                user_logger.error(
                     f"Catalog provided with selected table '{name}' missing. "
                     "Either add the table to the catalog or remove it from the config."
                 )
+                sys.exit(1)
         else:
             super().__init__(name=name, tap=tap)
 
@@ -85,7 +82,5 @@ class TableStream(Stream):
                 self._infer_schema_sample_size,
                 self._table_scan_kwargs,
             )
-            self._primary_keys = self._dynamodb_conn.get_table_key_properties(
-                self._table_name
-            )
+            self._primary_keys = self._dynamodb_conn.get_table_key_properties(self._table_name)
         return self._schema
