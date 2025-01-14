@@ -3,11 +3,11 @@
 import genson
 import orjson
 from botocore.exceptions import ClientError
+from custom_logger import user_logger
 from mypy_boto3_dynamodb import DynamoDBClient, DynamoDBServiceResource
-from singer_sdk import typing as th  # JSON schema typing helpers
+from singer_sdk import typing as th
 
 from tap_dynamodb.connectors.aws_boto_connector import AWSBotoConnector
-from tap_dynamodb.exception import EmptyTableException
 
 
 class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient]):
@@ -56,10 +56,8 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
                 if include is None or table.name in include:
                     tables.append(table.name)
         except ClientError as err:
-            self.logger.error(
-                "Couldn't list tables. Here's why: %s: %s",
-                err.response["Error"]["Code"],
-                err.response["Error"]["Message"],
+            user_logger.error(
+                f"Couldn't list tables. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
             )
             raise
         else:
@@ -83,11 +81,8 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
                 start_key = response.get("LastEvaluatedKey", None)
                 done = start_key is None
         except ClientError as err:
-            self.logger.error(
-                "Couldn't scan for %s. Here's why: %s: %s",
-                table_name,
-                err.response["Error"]["Code"],
-                err.response["Error"]["Message"],
+            user_logger.error(
+                f"Couldn't scan for {table_name}. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
             )
             raise
 
@@ -110,7 +105,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
         sample_records = self._get_sample_records(table_name, sample_size, scan_kwargs)
 
         if not sample_records:
-            self.logger.warning(f"No records found for table '{table_name}', generating empty schema.")
+            user_logger.warning(f"No records found for table '{table_name}', generating empty schema.")
             self._primary_keys = self.get_table_key_properties(table_name)
             properties = [th.Property(key, th.StringType) for key in self._primary_keys]
             return th.PropertiesList(*properties).to_dict()
@@ -121,11 +116,13 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             schema = builder.to_schema()
             self._recursively_drop_required(schema)
             if not schema:
-                raise Exception("Inferring schema failed")
+                user_logger.error("Inferring schema failed.")
+                raise Exception("Inferring schema failed.")
             else:
-                self.logger.info(f"Inferring schema successful for table: '{table_name}'")
+                user_logger.info(f"Inferring schema successful for table: '{table_name}'.")
         else:
-            raise Exception(f"Strategy {strategy} not supported")
+            user_logger.error(f"Strategy {strategy} not supported.")
+            raise Exception(f"Strategy {strategy} not supported.")
         return schema
 
     def get_table_key_properties(self, table_name):

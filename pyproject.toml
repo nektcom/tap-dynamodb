@@ -24,6 +24,7 @@ orjson = "~=3.10.5"
 [tool.poetry.dependencies.singer-sdk]
 version = "~=0.41.0"
 
+custom-logger = {git = "https://github.com/olbycom/nekt-custom-logger-module.git", rev = "v0.0.6"}
 [tool.poetry.group.dev.dependencies]
 coverage = ">=7.5.4"
 moto = ">=5.0.10"

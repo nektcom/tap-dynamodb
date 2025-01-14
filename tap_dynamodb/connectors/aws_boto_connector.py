@@ -8,15 +8,13 @@ import boto3.session
 from boto3.resources.base import ServiceResource
 from boto3.session import Session
 from botocore.client import BaseClient
-from singer_sdk import typing as th  # JSON schema typing helpers
+from custom_logger import user_logger
+from singer_sdk import typing as th
 
 try:
     import boto3
 except ImportError:
-    raise Exception(
-        "boto3 is required for this authenticator. "
-        "Please install it with `poetry add boto3`."
-    )
+    raise Exception("boto3 is required for this authenticator. Please install it with `poetry add boto3`.")
 
 if t.TYPE_CHECKING:
     from mypy_boto3_sts import STSClient
@@ -39,18 +37,12 @@ AWS_AUTH_CONFIG = th.PropertiesList(
         "aws_session_token",
         th.StringType,
         secret=True,
-        description=(
-            "The session key for your AWS account. This is only needed when"
-            " you are using temporary credentials."
-        ),
+        description="The session key for your AWS account. This is only needed when you are using temporary credentials.",
     ),
     th.Property(
         "aws_profile",
         th.StringType,
-        description=(
-            "The AWS credentials profile name to use. The profile must be "
-            "configured and accessible."
-        ),
+        description="The AWS credentials profile name to use. The profile must be configured and accessible.",
     ),
     th.Property(
         "aws_default_region",
@@ -132,7 +124,7 @@ class AWSBotoConnector(t.Generic[_R, _C]):
         Returns:
             Plugin logger.
         """
-        return logging.getLogger("aws_boto_connector")
+        return user_logger
 
     @property
     def client(self) -> _C:
@@ -172,35 +164,21 @@ class AWSBotoConnector(t.Generic[_R, _C]):
             Exception: If no credentials are provided.
         """
         session = None
-        if (
-            self.aws_access_key_id
-            and self.aws_secret_access_key
-            and self.aws_session_token
-            and self.aws_default_region
-        ):
+        if self.aws_access_key_id and self.aws_secret_access_key and self.aws_session_token and self.aws_default_region:
             session = boto3.Session(
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_secret_access_key,
                 aws_session_token=self.aws_session_token,
                 region_name=self.aws_default_region,
             )
-            self.logger.info(
-                "Authenticating using access key id, secret access key, and "
-                "session token."
-            )
-        elif (
-            self.aws_access_key_id
-            and self.aws_secret_access_key
-            and self.aws_default_region
-        ):
+            self.logger.info("Authenticating using access key id, secret access key, and session token.")
+        elif self.aws_access_key_id and self.aws_secret_access_key and self.aws_default_region:
             session = boto3.Session(
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_secret_access_key,
                 region_name=self.aws_default_region,
             )
-            self.logger.info(
-                "Authenticating using access key id and secret access key."
-            )
+            self.logger.info("Authenticating using access key id and secret access key.")
         elif self.aws_profile:
             session = boto3.Session(profile_name=self.aws_profile)
             self.logger.info("Authenticating using profile.")

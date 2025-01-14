@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from singer_sdk import Tap
-from singer_sdk import typing as th  # JSON schema typing helpers
+from custom_logger import internal_logger
+from singer_sdk import Stream, Tap
+from singer_sdk import typing as th
 
 from tap_dynamodb import streams
 from tap_dynamodb.connectors.aws_boto_connector import AWS_AUTH_CONFIG
@@ -43,7 +44,7 @@ class TapDynamoDB(Tap):
         ),
     ).to_dict()
 
-    def discover_streams(self) -> list[streams.TableStream]:
+    def _discover_streams(self) -> list[streams.TableStream]:
         """Return a list of discovered streams.
 
         Returns:
@@ -63,6 +64,13 @@ class TapDynamoDB(Tap):
             discovered_streams.append(stream)
 
         return discovered_streams
+
+    def discover_streams(self) -> list[Stream]:
+        try:
+            return self._discover_streams()
+        except Exception as e:
+            internal_logger.exception(f"Error on discover: {e}")
+            raise
 
     @classmethod
     def append_builtin_config(cls: type[PluginBase], config_jsonschema: dict) -> None:
