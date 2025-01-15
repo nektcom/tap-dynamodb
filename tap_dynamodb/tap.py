@@ -5,17 +5,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import custom_logger
+
+_ = custom_logger
 from singer_sdk import Tap
 from singer_sdk import typing as th
-
 from tap_dynamodb import streams
 from tap_dynamodb.connectors.aws_boto_connector import AWS_AUTH_CONFIG
 from tap_dynamodb.dynamodb_connector import DynamoDbConnector
 
 if TYPE_CHECKING:
     from singer_sdk.plugin_base import PluginBase
-
-_ = custom_logger
 
 
 class TapDynamoDB(Tap):
