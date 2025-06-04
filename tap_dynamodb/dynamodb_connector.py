@@ -10,6 +10,10 @@ from nekt_singer_sdk import typing as th
 from nekt_singer_sdk.custom_logger import user_logger
 
 from tap_dynamodb.connectors.aws_boto_connector import AWSBotoConnector
+from tap_dynamodb.schema_helper import (
+    make_properties_nullable,
+    recursively_drop_required,
+)
 
 
 class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient]):
@@ -35,20 +39,6 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
                 option=orjson.OPT_OMIT_MICROSECONDS,
             ).decode("utf-8")
         )
-
-    def _recursively_drop_required(self, schema: dict) -> None:
-        """Recursively drop the required property from a schema.
-
-        This is used to clean up genson generated schemas which are strict by default.
-
-        Args:
-            schema: The json schema.
-        """
-        schema.pop("required", None)
-        if "properties" in schema:
-            for prop in schema["properties"]:
-                if schema["properties"][prop].get("type") == "object":
-                    self._recursively_drop_required(schema["properties"][prop])
 
     def list_tables(self, include=None):
         """List tables in DynamoDB."""
@@ -116,7 +106,8 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             for record in sample_records:
                 builder.add_object(self._coerce_types(record))
             schema = builder.to_schema()
-            self._recursively_drop_required(schema)
+            recursively_drop_required(schema)
+            make_properties_nullable(schema)
             if not schema:
                 user_logger.error("Inferring schema failed.")
                 sys.exit(1)
@@ -128,6 +119,9 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
         return schema
 
     def get_table_key_properties(self, table_name):
+        """Get the key properties for a table in DynamoDB."""
+        key_schema = self.resource.Table(table_name).key_schema
+        return [key.get("AttributeName") for key in key_schema]
         """Get the key properties for a table in DynamoDB."""
         key_schema = self.resource.Table(table_name).key_schema
         return [key.get("AttributeName") for key in key_schema]
