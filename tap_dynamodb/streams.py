@@ -5,14 +5,14 @@ from __future__ import annotations
 import sys
 import typing as t
 
-from custom_logger import user_logger
-from singer_sdk.streams import Stream
+from nekt_singer_sdk.custom_logger import user_logger
+from nekt_singer_sdk.streams import Stream
 
 if t.TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from singer_sdk.helpers.types import Context
-    from singer_sdk.tap_base import Tap
+    from nekt_singer_sdk.helpers.types import Context
+    from nekt_singer_sdk.tap_base import Tap
 
     from tap_dynamodb.dynamodb_connector import DynamoDbConnector
 

@@ -6,19 +6,16 @@ import json
 import os
 from typing import TYPE_CHECKING
 
-import custom_logger
-
-_ = custom_logger
-from singer_sdk import Tap
-from singer_sdk import typing as th
-from singer_sdk.streams.core import REPLICATION_FULL_TABLE
+from nekt_singer_sdk import Tap
+from nekt_singer_sdk import typing as th
+from nekt_singer_sdk.streams.core import REPLICATION_FULL_TABLE
 
 from tap_dynamodb import streams
 from tap_dynamodb.connectors.aws_boto_connector import AWS_AUTH_CONFIG
 from tap_dynamodb.dynamodb_connector import DynamoDbConnector
 
 if TYPE_CHECKING:
-    from singer_sdk.plugin_base import PluginBase
+    from nekt_singer_sdk.plugin_base import PluginBase
 
 
 class TapDynamoDB(Tap):
