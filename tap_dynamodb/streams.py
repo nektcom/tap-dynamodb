@@ -100,4 +100,11 @@ class TableStream(Stream):
             self._primary_keys = self._dynamodb_conn.get_table_key_properties(self._table_name)
             self._replication_key = self.user_defined_replication_key
             self._replication_method = self.user_defined_replication_method
+            # Coerce the replication key to a datetime if it's a string
+            if (
+                self.user_defined_replication_key
+                and self.user_defined_replication_key in self._schema["properties"]
+                and self._schema["properties"][self.user_defined_replication_key]["type"] == "string"
+            ):
+                self._schema["properties"][self.user_defined_replication_key]["format"] = "date-time"
         return self._schema
