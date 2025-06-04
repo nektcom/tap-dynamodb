@@ -5,14 +5,14 @@ from __future__ import annotations
 import sys
 import typing as t
 
-from custom_logger import user_logger
-from singer_sdk.streams import Stream
+from nekt_singer_sdk.custom_logger import user_logger
+from nekt_singer_sdk.streams import Stream
 
 if t.TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from singer_sdk.helpers.types import Context
-    from singer_sdk.tap_base import Tap
+    from nekt_singer_sdk.helpers.types import Context
+    from nekt_singer_sdk.tap_base import Tap
 
     from tap_dynamodb.dynamodb_connector import DynamoDbConnector
 
@@ -20,12 +20,16 @@ if t.TYPE_CHECKING:
 class TableStream(Stream):
     """Stream class for TableStream streams."""
 
+    user_defined_replication_key = None
+
     def __init__(
         self,
         tap: Tap,
         name: str,
         dynamodb_conn: DynamoDbConnector,
-        infer_schema_sample_size,
+        infer_schema_sample_size: int,
+        replication_key: str | None,
+        replication_method: str,
     ):
         """Initialize a new TableStream object.
 
@@ -35,7 +39,12 @@ class TableStream(Stream):
             dynamodb_conn: The DynamoDbConnector object.
             infer_schema_sample_size: The amount of records to sample when
                 inferring the schema.
+            replication_key: The key to use for incremental replication.
+            replication_method: The method to use for incremental replication.
         """
+        self.user_defined_replication_key = replication_key
+        self.user_defined_replication_method = replication_method
+
         self._dynamodb_conn: DynamoDbConnector = dynamodb_conn
         self._table_name: str = name
         self._schema: dict = {}
@@ -60,6 +69,13 @@ class TableStream(Stream):
 
     def get_records(self, context: Context | None) -> Iterable[dict]:
         """Generate records from the stream."""
+        if self._replication_key and self.get_starting_replication_key_value(context):
+            self._table_scan_kwargs["FilterExpression"] = f"#incremental_filter >= :incremental_value"
+            self._table_scan_kwargs["ExpressionAttributeNames"] = {"#incremental_filter": self.replication_key}
+            self._table_scan_kwargs["ExpressionAttributeValues"] = {
+                ":incremental_value": self.get_starting_replication_key_value(context)
+            }
+
         for batch in self._dynamodb_conn.get_items_iter(
             self._table_name,
             self._table_scan_kwargs,
@@ -75,7 +91,6 @@ class TableStream(Stream):
         Returns:
             dict
         """
-        # TODO: SDC columns
         if not self._schema:
             self._schema = self._dynamodb_conn.get_table_json_schema(
                 self._table_name,
@@ -83,4 +98,6 @@ class TableStream(Stream):
                 self._table_scan_kwargs,
             )
             self._primary_keys = self._dynamodb_conn.get_table_key_properties(self._table_name)
+            self._replication_key = self.user_defined_replication_key
+            self._replication_method = self.user_defined_replication_method
         return self._schema

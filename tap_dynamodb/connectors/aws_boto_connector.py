@@ -2,7 +2,6 @@
 
 import logging
 import os
-import sys
 import typing as t
 
 import boto3
@@ -10,8 +9,8 @@ import boto3.session
 from boto3.resources.base import ServiceResource
 from boto3.session import Session
 from botocore.client import BaseClient
-from custom_logger import user_logger
-from singer_sdk import typing as th
+from nekt_singer_sdk import typing as th
+from nekt_singer_sdk.custom_logger import user_logger
 
 if t.TYPE_CHECKING:
     from mypy_boto3_sts import STSClient

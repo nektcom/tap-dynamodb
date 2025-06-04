@@ -5,9 +5,9 @@ import sys
 import genson
 import orjson
 from botocore.exceptions import ClientError
-from custom_logger import user_logger
 from mypy_boto3_dynamodb import DynamoDBClient, DynamoDBServiceResource
-from singer_sdk import typing as th
+from nekt_singer_sdk import typing as th
+from nekt_singer_sdk.custom_logger import user_logger
 
 from tap_dynamodb.connectors.aws_boto_connector import AWSBotoConnector
 

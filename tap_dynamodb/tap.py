@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import json
+import os
 from typing import TYPE_CHECKING
 
-import custom_logger
+from nekt_singer_sdk import Tap
+from nekt_singer_sdk import typing as th
+from nekt_singer_sdk.streams.core import REPLICATION_FULL_TABLE
 
-_ = custom_logger
-from singer_sdk import Tap
-from singer_sdk import typing as th
 from tap_dynamodb import streams
 from tap_dynamodb.connectors.aws_boto_connector import AWS_AUTH_CONFIG
 from tap_dynamodb.dynamodb_connector import DynamoDbConnector
 
 if TYPE_CHECKING:
-    from singer_sdk.plugin_base import PluginBase
+    from nekt_singer_sdk.plugin_base import PluginBase
 
 
 class TapDynamoDB(Tap):
@@ -56,11 +57,17 @@ class TapDynamoDB(Tap):
         )
         discovered_streams = []
         for table_name in self.config.get("tables") or dynamodb_conn.list_tables():
+            tap_metadata = json.loads(os.environ.get(f"{self._env_var_prefix}_METADATA", "{}"))
+            stream_metadata = tap_metadata.get(table_name, {})
+            replication_key: str | None = stream_metadata.get("replication-key")
+            replication_method: str = stream_metadata.get("replication-method", REPLICATION_FULL_TABLE)
             stream = streams.TableStream(
                 tap=self,
                 name=table_name,
                 dynamodb_conn=dynamodb_conn,
                 infer_schema_sample_size=self.config.get("infer_schema_sample_size"),
+                replication_key=replication_key,
+                replication_method=replication_method,
             )
             discovered_streams.append(stream)
 
