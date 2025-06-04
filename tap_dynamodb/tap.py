@@ -59,7 +59,7 @@ class TapDynamoDB(Tap):
         for table_name in self.config.get("tables") or dynamodb_conn.list_tables():
             tap_metadata = json.loads(os.environ.get(f"{self._env_var_prefix}_METADATA", "{}"))
             stream_metadata = tap_metadata.get(table_name, {})
-            replication_key: str | None = stream_metadata.get("replication-key") or "DT"
+            replication_key: str | None = stream_metadata.get("replication-key")
             replication_method: str = stream_metadata.get("replication-method", REPLICATION_FULL_TABLE)
             stream = streams.TableStream(
                 tap=self,
