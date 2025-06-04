@@ -70,7 +70,7 @@ class TableStream(Stream):
     def get_records(self, context: Context | None) -> Iterable[dict]:
         """Generate records from the stream."""
         if self._replication_key and self.get_starting_replication_key_value(context):
-            self._table_scan_kwargs["FilterExpression"] = f"#incremental_filter >= :incremental_value"
+            self._table_scan_kwargs["FilterExpression"] = f"#incremental_filter > :incremental_value"
             self._table_scan_kwargs["ExpressionAttributeNames"] = {"#incremental_filter": self.replication_key}
             self._table_scan_kwargs["ExpressionAttributeValues"] = {
                 ":incremental_value": self.get_starting_replication_key_value(context)
