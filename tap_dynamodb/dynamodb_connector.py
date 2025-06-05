@@ -103,7 +103,6 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
         while not done:
             if start_key:
                 scan_kwargs["ExclusiveStartKey"] = start_key
-                user_logger.info(f"Continuing scan with start key: {start_key}")
 
             user_logger.info(f"Executing scan with parameters: {scan_kwargs}")
 
@@ -130,9 +129,6 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
 
             start_key = response.get("LastEvaluatedKey", None)
             done = start_key is None
-
-            if not done:
-                user_logger.info(f"More items available. Next start key: {start_key}")
 
     def _get_sample_records(self, table_name: str, sample_size: int, scan_kwargs_override: dict) -> list:
         scan_kwargs = scan_kwargs_override.copy()
