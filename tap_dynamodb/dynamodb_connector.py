@@ -16,10 +16,6 @@ from tap_dynamodb.schema_helper import (
     recursively_drop_required,
 )
 
-decimal.getcontext().traps[decimal.Rounded] = False
-decimal.getcontext().traps[decimal.Inexact] = False
-decimal.getcontext().traps[decimal.Underflow] = False
-
 
 class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient]):
     """DynamoDB connector class."""
@@ -84,40 +80,50 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             scan_kwargs["ConsistentRead"] = True
 
         table = self.resource.Table(table_name)
-        try:
-            done = False
-            start_key = None
-            while not done:
-                if start_key:
-                    scan_kwargs["ExclusiveStartKey"] = start_key
-                    user_logger.info(f"Continuing scan with start key: {start_key}")
 
-                user_logger.info(f"Executing scan with parameters: {scan_kwargs}")
+        done = False
+        start_key = None
+
+        while not done:
+            if start_key:
+                scan_kwargs["ExclusiveStartKey"] = start_key
+                user_logger.info(f"Continuing scan with start key: {start_key}")
+
+            user_logger.info(f"Executing scan with parameters: {scan_kwargs}")
+
+            try:
                 response = table.scan(**scan_kwargs)
+            except decimal.Rounded as e:
+                user_logger.warning(f"Rounded decimal issue in scan for table {table_name}: {e}")
+                sys.exit(1)
+            except ClientError as err:
+                user_logger.error(
+                    f"Couldn't scan {table_name}. AWS Error: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
+                )
+                sys.exit(1)
+            except Exception as e:
+                user_logger.error(f"Unexpected error during scan of {table_name}: {str(e)}")
+                sys.exit(1)
 
-                items = response.get("Items", [])
+            items = response.get("Items", [])
 
-                try:
-                    processed_items = [self._coerce_types(record) for record in items]
-                    yield processed_items
-                except Exception as e:
-                    user_logger.error(f"Error processing items batch from table {table_name}")
-                    user_logger.error(f"First few raw items that caused error: {items[:2]}")
-                    sys.exit(1)
+            try:
+                processed_items = [self._coerce_types(record) for record in items]
+                yield processed_items
+            except decimal.Rounded as e:
+                user_logger.warning(f"Rounded decimal during item processing in {table_name}: {e}")
+                # Decide: skip, sanitize, or exit
+                sys.exit(1)
+            except Exception as e:
+                user_logger.error(f"Error processing items batch from {table_name}: {e}")
+                user_logger.error(f"First few raw items: {items[:2]}")
+                sys.exit(1)
 
-                start_key = response.get("LastEvaluatedKey", None)
-                done = start_key is None
+            start_key = response.get("LastEvaluatedKey", None)
+            done = start_key is None
 
-                if not done:
-                    user_logger.debug(f"More items available. Next start key: {start_key}")
-        except ClientError as err:
-            user_logger.error(
-                f"Couldn't scan for {table_name}. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
-            )
-            sys.exit(1)
-        except Exception as e:
-            user_logger.error(f"Unexpected error during scan of table {table_name}: {str(e)}")
-            sys.exit(1)
+            if not done:
+                user_logger.info(f"More items available. Next start key: {start_key}")
 
     def _get_sample_records(self, table_name: str, sample_size: int, scan_kwargs_override: dict) -> list:
         scan_kwargs = scan_kwargs_override.copy()
