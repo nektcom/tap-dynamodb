@@ -3,6 +3,8 @@
 import decimal
 import sys
 
+# Monkey patch boto3's decimal handling
+import boto3.dynamodb.types
 import genson
 import orjson
 from botocore.exceptions import ClientError
@@ -15,6 +17,20 @@ from tap_dynamodb.schema_helper import (
     make_properties_nullable,
     recursively_drop_required,
 )
+
+original_deserialize_n = boto3.dynamodb.types.TypeDeserializer._deserialize_n
+
+
+def _patched_deserialize_n(self, value):
+    """Patch to safely handle decimal deserialization."""
+    try:
+        return original_deserialize_n(self, value)
+    except decimal.Rounded:
+        # If regular deserialization fails, try with string conversion
+        return boto3.dynamodb.types.DYNAMODB_CONTEXT.create_decimal(str(value))
+
+
+boto3.dynamodb.types.TypeDeserializer._deserialize_n = _patched_deserialize_n
 
 
 class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient]):
@@ -80,10 +96,8 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             scan_kwargs["ConsistentRead"] = True
 
         table = self.resource.Table(table_name)
-
         done = False
         start_key = None
-
         while not done:
             if start_key:
                 scan_kwargs["ExclusiveStartKey"] = start_key
@@ -93,9 +107,6 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
 
             try:
                 response = table.scan(**scan_kwargs)
-            except decimal.Rounded as e:
-                user_logger.warning(f"Rounded decimal issue in scan for table {table_name}: {e}")
-                sys.exit(1)
             except ClientError as err:
                 user_logger.error(
                     f"Couldn't scan {table_name}. AWS Error: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
@@ -110,10 +121,6 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             try:
                 processed_items = [self._coerce_types(record) for record in items]
                 yield processed_items
-            except decimal.Rounded as e:
-                user_logger.warning(f"Rounded decimal during item processing in {table_name}: {e}")
-                # Decide: skip, sanitize, or exit
-                sys.exit(1)
             except Exception as e:
                 user_logger.error(f"Error processing items batch from {table_name}: {e}")
                 user_logger.error(f"First few raw items: {items[:2]}")
