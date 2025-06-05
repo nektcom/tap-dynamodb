@@ -2,6 +2,7 @@
 
 import decimal
 import sys
+from decimal import Clamped, Context, Decimal, Inexact, Overflow, Rounded, Underflow
 
 # Monkey patch boto3's decimal handling
 import boto3.dynamodb.types
@@ -18,19 +19,20 @@ from tap_dynamodb.schema_helper import (
     recursively_drop_required,
 )
 
-original_deserialize_n = boto3.dynamodb.types.TypeDeserializer._deserialize_n
+## Monkey Patch
+
+SAFE_CONTEXT = Context(prec=38, traps=[])  # ← No traps
 
 
-def _patched_deserialize_n(self, value):
-    """Patch to safely handle decimal deserialization."""
-    try:
-        return original_deserialize_n(self, value)
-    except decimal.Rounded:
-        # If regular deserialization fails, try with string conversion
-        return boto3.dynamodb.types.DYNAMODB_CONTEXT.create_decimal(str(value))
+def safe_create_decimal(value):
+    return SAFE_CONTEXT.create_decimal(str(value))
 
 
-boto3.dynamodb.types.TypeDeserializer._deserialize_n = _patched_deserialize_n
+boto3.dynamodb.types.DYNAMODB_CONTEXT = SAFE_CONTEXT
+boto3.dynamodb.types.TypeDeserializer.create_decimal = staticmethod(safe_create_decimal)
+
+
+## -- end of Monkey Patch
 
 
 class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient]):
