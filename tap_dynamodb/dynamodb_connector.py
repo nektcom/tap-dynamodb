@@ -1,5 +1,6 @@
 """DynamoDB connector class."""
 
+import decimal
 import sys
 
 import genson
@@ -32,13 +33,30 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
 
     @staticmethod
     def _coerce_types(record):
-        return orjson.loads(
-            orjson.dumps(
-                record,
-                default=lambda o: str(o),
-                option=orjson.OPT_OMIT_MICROSECONDS,
-            ).decode("utf-8")
-        )
+        try:
+
+            def handle_unusual_types(obj):
+                try:
+                    if isinstance(obj, decimal.Decimal):
+                        return float(obj)
+                    return str(obj)
+                except Exception as e:
+                    user_logger.error(
+                        f"Error in handle_unusual_types function for value {obj} of type {type(obj)}: {str(e)}"
+                    )
+                    sys.exit(1)
+
+            result = orjson.loads(
+                orjson.dumps(
+                    record,
+                    default=handle_unusual_types,
+                    option=orjson.OPT_OMIT_MICROSECONDS,
+                ).decode("utf-8")
+            )
+            return result
+        except Exception as e:
+            user_logger.error(f"Error processing record: {record} with error: {str(e)}")
+            sys.exit(1)
 
     def list_tables(self, include=None):
         """List tables in DynamoDB."""
@@ -68,14 +86,33 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             while not done:
                 if start_key:
                     scan_kwargs["ExclusiveStartKey"] = start_key
+                    user_logger.info(f"Continuing scan with start key: {start_key}")
+
+                user_logger.info(f"Executing scan with parameters: {scan_kwargs}")
                 response = table.scan(**scan_kwargs)
-                yield [self._coerce_types(record) for record in response.get("Items", [])]
+
+                items = response.get("Items", [])
+
+                try:
+                    processed_items = [self._coerce_types(record) for record in items]
+                    yield processed_items
+                except Exception as e:
+                    user_logger.error(f"Error processing items batch from table {table_name}")
+                    user_logger.error(f"First few raw items that caused error: {items[:2]}")
+                    sys.exit(1)
+
                 start_key = response.get("LastEvaluatedKey", None)
                 done = start_key is None
+
+                if not done:
+                    user_logger.debug(f"More items available. Next start key: {start_key}")
         except ClientError as err:
             user_logger.error(
                 f"Couldn't scan for {table_name}. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
             )
+            sys.exit(1)
+        except Exception as e:
+            user_logger.error(f"Unexpected error during scan of table {table_name}: {str(e)}")
             sys.exit(1)
 
     def _get_sample_records(self, table_name: str, sample_size: int, scan_kwargs_override: dict) -> list:

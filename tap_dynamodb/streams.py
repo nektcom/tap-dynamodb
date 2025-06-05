@@ -69,18 +69,35 @@ class TableStream(Stream):
 
     def get_records(self, context: Context | None) -> Iterable[dict]:
         """Generate records from the stream."""
+        total_records = 0
         if self._replication_key and self.get_starting_replication_key_value(context):
+            user_logger.info(
+                f"Using replication key: {self.replication_key} with starting value: {self.get_starting_replication_key_value(context)}"
+            )
             self._table_scan_kwargs["FilterExpression"] = f"#incremental_filter > :incremental_value"
             self._table_scan_kwargs["ExpressionAttributeNames"] = {"#incremental_filter": self.replication_key}
             self._table_scan_kwargs["ExpressionAttributeValues"] = {
                 ":incremental_value": self.get_starting_replication_key_value(context)
             }
 
-        for batch in self._dynamodb_conn.get_items_iter(
-            self._table_name,
-            self._table_scan_kwargs,
-        ):
-            yield from batch
+        try:
+            for batch in self._dynamodb_conn.get_items_iter(
+                self._table_name,
+                self._table_scan_kwargs,
+            ):
+                user_logger.info(f"Processing batch of {len(batch)} records for table {self._table_name}")
+                total_records += len(batch)
+                for record in batch:
+                    try:
+                        yield record
+                    except Exception as e:
+                        user_logger.error(f"Error processing individual record: {record}. Error details: {str(e)}")
+                        sys.exit(1)
+            user_logger.info(f"Total records processed for table {self._table_name}: {total_records}")
+        except Exception as e:
+            user_logger.error(f"Error getting records for table {self._table_name}. Error details: {str(e)}")
+            user_logger.error(f"Table scan kwargs: {self._table_scan_kwargs}")
+            sys.exit(1)
 
     @property
     def schema(self) -> dict:
