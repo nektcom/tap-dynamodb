@@ -16,6 +16,10 @@ from tap_dynamodb.schema_helper import (
     recursively_drop_required,
 )
 
+decimal.getcontext().traps[decimal.Rounded] = False
+decimal.getcontext().traps[decimal.Inexact] = False
+decimal.getcontext().traps[decimal.Underflow] = False
+
 
 class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient]):
     """DynamoDB connector class."""
