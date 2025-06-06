@@ -6,15 +6,12 @@ import typing as t
 
 import boto3
 import boto3.session
+from aws_assume_role_lib import assume_role
 from boto3.resources.base import ServiceResource
 from boto3.session import Session
 from botocore.client import BaseClient
 from nekt_singer_sdk import typing as th
 from nekt_singer_sdk.custom_logger import user_logger
-
-if t.TYPE_CHECKING:
-    from mypy_boto3_sts import STSClient
-
 
 AWS_AUTH_CONFIG = th.PropertiesList(
     th.Property(
@@ -224,15 +221,6 @@ class AWSBotoConnector(t.Generic[_R, _C]):
         return self._factory(session.client, service_name)
 
     def _assume_role(self, session: Session, role_arn: str) -> Session:
-        # TODO: use for auto refresh https://github.com/benkehoe/aws-assume-role-lib
-        sts_client: STSClient = self.get_client(session, "sts")  # type: ignore[assignment]
-        response = sts_client.assume_role(
-            RoleArn=role_arn,
-            RoleSessionName="tap-dynamodb",
-        )
-        return boto3.Session(
-            aws_access_key_id=response["Credentials"]["AccessKeyId"],
-            aws_secret_access_key=response["Credentials"]["SecretAccessKey"],
-            aws_session_token=response["Credentials"]["SessionToken"],
-            region_name=self.aws_default_region,
-        )
+        assumed_role_session = assume_role(session, role_arn)
+        user_logger.info(f"Successfully assumed role {role_arn} with refreshable credentials.")
+        return assumed_role_session
