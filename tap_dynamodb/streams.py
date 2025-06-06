@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import typing as t
 
@@ -124,4 +125,5 @@ class TableStream(Stream):
                 and self._schema["properties"][self.user_defined_replication_key]["type"] == "string"
             ):
                 self._schema["properties"][self.user_defined_replication_key]["format"] = "date-time"
+            user_logger.info(f"Inferred schema: {self._schema}")
         return self._schema
