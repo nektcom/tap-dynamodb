@@ -39,3 +39,31 @@ def make_properties_nullable(schema):
         # If this is a list, recursively process each item
         for item in schema:
             make_properties_nullable(item)
+
+
+def remove_null_only_properties(schema_node):
+    """Recursively remove properties that only have 'null' in their type list."""
+    if not isinstance(schema_node, dict):
+        return
+
+    if "properties" in schema_node and isinstance(schema_node["properties"], dict):
+        properties_to_delete = []
+        for prop_name, prop_schema in schema_node["properties"].items():
+            if isinstance(prop_schema, dict) and "type" in prop_schema:
+                prop_types = prop_schema.get("type")
+                # Handle cases where type is a list or a single string
+                if isinstance(prop_types, list):
+                    if all(t == "null" for t in prop_types):
+                        properties_to_delete.append(prop_name)
+                elif prop_types == "null":
+                    properties_to_delete.append(prop_name)
+
+            # Recurse into nested objects
+            remove_null_only_properties(prop_schema)
+
+        for prop_name in properties_to_delete:
+            del schema_node["properties"][prop_name]
+
+    # Handle array items
+    if "items" in schema_node and isinstance(schema_node["items"], dict):
+        remove_null_only_properties(schema_node["items"])

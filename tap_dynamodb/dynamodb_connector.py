@@ -17,6 +17,7 @@ from tap_dynamodb.connectors.aws_boto_connector import AWSBotoConnector
 from tap_dynamodb.schema_helper import (
     make_properties_nullable,
     recursively_drop_required,
+    remove_null_only_properties,
 )
 
 ## Monkey Patch
@@ -154,6 +155,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             schema = builder.to_schema()
             recursively_drop_required(schema)
             make_properties_nullable(schema)
+            remove_null_only_properties(schema)
             if not schema:
                 user_logger.error("Inferring schema failed.")
                 sys.exit(1)
