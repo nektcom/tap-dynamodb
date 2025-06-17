@@ -7,6 +7,7 @@ import sys
 import typing as t
 
 from nekt_singer_sdk.custom_logger import user_logger
+from nekt_singer_sdk.record_cleanser import RecordCleanser
 from nekt_singer_sdk.streams import Stream
 
 if t.TYPE_CHECKING:
@@ -22,6 +23,7 @@ class TableStream(Stream):
     """Stream class for TableStream streams."""
 
     user_defined_replication_key = None
+    record_cleanser = RecordCleanser()
 
     def __init__(
         self,
@@ -60,10 +62,7 @@ class TableStream(Stream):
                     schema=catalog_entry.to_dict().get("schema"),
                 )
             else:
-                user_logger.error(
-                    f"Catalog provided with selected table '{name}' missing. "
-                    "Either add the table to the catalog or remove it from the config."
-                )
+                user_logger.error(f"Catalog provided with selected table '{name}' missing. Either add the table to the catalog or remove it from the config.")
                 sys.exit(1)
         else:
             super().__init__(name=name, tap=tap)
@@ -72,14 +71,10 @@ class TableStream(Stream):
         """Generate records from the stream."""
         total_records = 0
         if self._replication_key and self.get_starting_replication_key_value(context):
-            user_logger.info(
-                f"Using replication key: {self.replication_key} with starting value: {self.get_starting_replication_key_value(context)}"
-            )
+            user_logger.info(f"Using replication key: {self.replication_key} with starting value: {self.get_starting_replication_key_value(context)}")
             self._table_scan_kwargs["FilterExpression"] = f"#incremental_filter > :incremental_value"
             self._table_scan_kwargs["ExpressionAttributeNames"] = {"#incremental_filter": self.replication_key}
-            self._table_scan_kwargs["ExpressionAttributeValues"] = {
-                ":incremental_value": self.get_starting_replication_key_value(context)
-            }
+            self._table_scan_kwargs["ExpressionAttributeValues"] = {":incremental_value": self.get_starting_replication_key_value(context)}
 
         try:
             for batch in self._dynamodb_conn.get_items_iter(
@@ -90,7 +85,8 @@ class TableStream(Stream):
                 total_records += len(batch)
                 for record in batch:
                     try:
-                        yield record
+                        processed_msg = self.post_process(record, context)
+                        yield processed_msg
                     except Exception as e:
                         user_logger.error(f"Error processing individual record: {record}. Error details: {str(e)}")
                         sys.exit(1)
@@ -127,3 +123,10 @@ class TableStream(Stream):
                 self._schema["properties"][self.user_defined_replication_key]["format"] = "date-time"
             user_logger.info(f"Inferred schema: {self._schema}")
         return self._schema
+
+    def post_process(
+        self,
+        row: dict,
+        context: Context | None = None,
+    ) -> dict | None:
+        return self.record_cleanser.cleanse_record(row, self.schema)

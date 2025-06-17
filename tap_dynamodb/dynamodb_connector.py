@@ -59,9 +59,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
                         return float(obj)
                     return str(obj)
                 except Exception as e:
-                    user_logger.error(
-                        f"Error in handle_unusual_types function for value {obj} of type {type(obj)}: {str(e)}"
-                    )
+                    user_logger.error(f"Error in handle_unusual_types function for value {obj} of type {type(obj)}: {str(e)}")
                     sys.exit(1)
 
             result = orjson.loads(
@@ -84,9 +82,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
                 if include is None or table.name in include:
                     tables.append(table.name)
         except ClientError as err:
-            user_logger.error(
-                f"Couldn't list tables. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
-            )
+            user_logger.error(f"Couldn't list tables. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}")
             sys.exit(1)
         else:
             return tables
@@ -109,9 +105,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             try:
                 response = table.scan(**scan_kwargs)
             except ClientError as err:
-                user_logger.error(
-                    f"Couldn't scan {table_name}. AWS Error: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
-                )
+                user_logger.error(f"Couldn't scan {table_name}. AWS Error: {err.response['Error']['Code']}: {err.response['Error']['Message']}")
                 sys.exit(1)
             except Exception as e:
                 user_logger.error(f"Unexpected error during scan of {table_name}: {str(e)}")
@@ -171,9 +165,6 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
         return schema
 
     def get_table_key_properties(self, table_name):
-        """Get the key properties for a table in DynamoDB."""
-        key_schema = self.resource.Table(table_name).key_schema
-        return [key.get("AttributeName") for key in key_schema]
         """Get the key properties for a table in DynamoDB."""
         key_schema = self.resource.Table(table_name).key_schema
         return [key.get("AttributeName") for key in key_schema]
