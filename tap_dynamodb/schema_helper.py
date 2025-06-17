@@ -64,6 +64,9 @@ def remove_null_only_properties(schema_node):
         for prop_name in properties_to_delete:
             del schema_node["properties"][prop_name]
 
+        if "required" in schema_node and isinstance(schema_node["required"], list):
+            schema_node["required"] = [prop for prop in schema_node["required"] if prop not in properties_to_delete]
+
     # Handle array items
     if "items" in schema_node and isinstance(schema_node["items"], dict):
         remove_null_only_properties(schema_node["items"])
