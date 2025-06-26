@@ -44,6 +44,13 @@ class TapDynamoDB(Tap):
                 "override the default when querying that table."
             ),
         ),
+        th.Property(
+            "extraction_mode",
+            th.StringType,
+            description="The extraction mode to use.",
+            default="infer_schema",
+            allowed_values=["envelope", "infer_schema"],
+        ),
     ).to_dict()
 
     def discover_streams(self) -> list[streams.TableStream]:

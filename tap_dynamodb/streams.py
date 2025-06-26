@@ -6,8 +6,10 @@ import json
 import sys
 import typing as t
 
+from boto3.dynamodb.types import TypeDeserializer
 from nekt_singer_sdk.custom_logger import user_logger
 from nekt_singer_sdk.streams import Stream
+from singer_sdk import typing as th
 
 if t.TYPE_CHECKING:
     from collections.abc import Iterable
@@ -45,6 +47,7 @@ class TableStream(Stream):
         """
         self.user_defined_replication_key = replication_key
         self.user_defined_replication_method = replication_method
+        self.deserializer = TypeDeserializer()
 
         self._dynamodb_conn: DynamoDbConnector = dynamodb_conn
         self._table_name: str = name
@@ -60,38 +63,12 @@ class TableStream(Stream):
                     schema=catalog_entry.to_dict().get("schema"),
                 )
             else:
-                user_logger.error(f"Catalog provided with selected table '{name}' missing. Either add the table to the catalog or remove it from the config.")
+                user_logger.error(
+                    f"Catalog provided with selected table '{name}' missing. Either add the table to the catalog or remove it from the config."
+                )
                 sys.exit(1)
         else:
             super().__init__(name=name, tap=tap)
-
-    def get_records(self, context: Context | None) -> Iterable[dict]:
-        """Generate records from the stream."""
-        total_records = 0
-        if self._replication_key and self.get_starting_replication_key_value(context):
-            user_logger.info(f"Using replication key: {self.replication_key} with starting value: {self.get_starting_replication_key_value(context)}")
-            self._table_scan_kwargs["FilterExpression"] = f"#incremental_filter > :incremental_value"
-            self._table_scan_kwargs["ExpressionAttributeNames"] = {"#incremental_filter": self.replication_key}
-            self._table_scan_kwargs["ExpressionAttributeValues"] = {":incremental_value": self.get_starting_replication_key_value(context)}
-
-        try:
-            for batch in self._dynamodb_conn.get_items_iter(
-                self._table_name,
-                self._table_scan_kwargs,
-            ):
-                user_logger.info(f"Processing batch of {len(batch)} records for table {self._table_name}")
-                total_records += len(batch)
-                for record in batch:
-                    try:
-                        yield record
-                    except Exception as e:
-                        user_logger.error(f"Error processing individual record: {record}. Error details: {str(e)}")
-                        sys.exit(1)
-            user_logger.info(f"Total records processed for table {self._table_name}: {total_records}")
-        except Exception as e:
-            user_logger.error(f"Error getting records for table {self._table_name}. Error details: {str(e)}")
-            user_logger.error(f"Table scan kwargs: {self._table_scan_kwargs}")
-            sys.exit(1)
 
     @property
     def schema(self) -> dict:
@@ -103,20 +80,79 @@ class TableStream(Stream):
             dict
         """
         if not self._schema:
-            self._schema = self._dynamodb_conn.get_table_json_schema(
-                self._table_name,
-                self._infer_schema_sample_size,
-                self._table_scan_kwargs,
-            )
+            if self.config.get("extraction_mode") == "infer_schema":
+                self._schema = self._dynamodb_conn.get_table_json_schema(
+                    self._table_name,
+                    self._infer_schema_sample_size,
+                    self._table_scan_kwargs,
+                )
+                # Coerce the replication key to a datetime if it's a string
+                if (
+                    self.user_defined_replication_key
+                    and self.user_defined_replication_key in self._schema["properties"]
+                    and self._schema["properties"][self.user_defined_replication_key]["type"] == "string"
+                ):
+                    self._schema["properties"][self.user_defined_replication_key]["format"] = "date-time"
+            elif self.config.get("extraction_mode") == "envelope":
+                envelope_schema = th.PropertiesList(
+                    th.Property("_pk", th.StringType),
+                    th.Property("document", th.StringType),
+                )
+
+                if self.user_defined_replication_key:
+                    envelope_schema.append(th.Property(self.user_defined_replication_key, th.DateTimeType))
+
+                self._schema = envelope_schema.to_dict()
+
             self._primary_keys = self._dynamodb_conn.get_table_key_properties(self._table_name)
             self._replication_key = self.user_defined_replication_key
             self._replication_method = self.user_defined_replication_method
-            # Coerce the replication key to a datetime if it's a string
-            if (
-                self.user_defined_replication_key
-                and self.user_defined_replication_key in self._schema["properties"]
-                and self._schema["properties"][self.user_defined_replication_key]["type"] == "string"
-            ):
-                self._schema["properties"][self.user_defined_replication_key]["format"] = "date-time"
+
             user_logger.info(f"Inferred schema: {self._schema}")
         return self._schema
+
+    def get_records(self, context: Context | None) -> Iterable[dict]:
+        """Generate records from the stream."""
+        total_records = 0
+        if self._replication_key and self.get_starting_replication_key_value(context):
+            user_logger.info(
+                f"Using replication key: {self.replication_key} with starting value: {self.get_starting_replication_key_value(context)}"
+            )
+            self._table_scan_kwargs["FilterExpression"] = f"#incremental_filter > :incremental_value"
+            self._table_scan_kwargs["ExpressionAttributeNames"] = {"#incremental_filter": self.replication_key}
+            self._table_scan_kwargs["ExpressionAttributeValues"] = {
+                ":incremental_value": self.get_starting_replication_key_value(context)
+            }
+
+        try:
+            for batch in self._dynamodb_conn.get_items_iter(
+                self._table_name,
+                self._table_scan_kwargs,
+            ):
+                user_logger.info(f"Processing batch of {len(batch)} records for table {self._table_name}")
+                total_records += len(batch)
+                for record in batch:
+                    try:
+                        yield self.process_record(record)
+                    except Exception as e:
+                        user_logger.error(f"Error processing individual record: {record}. Error details: {str(e)}")
+                        sys.exit(1)
+            user_logger.info(f"Total records processed for table {self._table_name}: {total_records}")
+        except Exception as e:
+            user_logger.error(f"Error getting records for table {self._table_name}. Error details: {str(e)}")
+            user_logger.error(f"Table scan kwargs: {self._table_scan_kwargs}")
+            sys.exit(1)
+
+    def process_record(self, record: dict) -> dict:
+        if self.config.get("extraction_mode") == "envelope":
+            processed_record = {
+                "_pk": record.get(self._primary_keys[0]),
+                "document": record,
+            }
+
+            if self.replication_key:
+                processed_record[self.replication_key] = record.get(self.replication_key)
+        else:
+            processed_record = record
+
+        return processed_record

@@ -58,9 +58,15 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
                 try:
                     if isinstance(obj, decimal.Decimal):
                         return float(obj)
+                    elif isinstance(obj, (set, frozenset)):
+                        return list(obj)
+                    elif isinstance(obj, bytes):  # for binary data
+                        return obj.decode("utf-8", errors="replace")
                     return str(obj)
                 except Exception as e:
-                    user_logger.error(f"Error in handle_unusual_types function for value {obj} of type {type(obj)}: {str(e)}")
+                    user_logger.error(
+                        f"Error in handle_unusual_types function for value {obj} of type {type(obj)}: {str(e)}"
+                    )
                     sys.exit(1)
 
             result = orjson.loads(
@@ -83,7 +89,9 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
                 if include is None or table.name in include:
                     tables.append(table.name)
         except ClientError as err:
-            user_logger.error(f"Couldn't list tables. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}")
+            user_logger.error(
+                f"Couldn't list tables. Here's why: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
+            )
             sys.exit(1)
         else:
             return tables
@@ -106,7 +114,9 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             try:
                 response = table.scan(**scan_kwargs)
             except ClientError as err:
-                user_logger.error(f"Couldn't scan {table_name}. AWS Error: {err.response['Error']['Code']}: {err.response['Error']['Message']}")
+                user_logger.error(
+                    f"Couldn't scan {table_name}. AWS Error: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
+                )
                 sys.exit(1)
             except Exception as e:
                 user_logger.error(f"Unexpected error during scan of {table_name}: {str(e)}")
@@ -148,22 +158,22 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             self._primary_keys = self.get_table_key_properties(table_name)
             properties = [th.Property(key, th.StringType) for key in self._primary_keys]
             return th.PropertiesList(*properties).to_dict()
-        if strategy == "infer":
-            builder = genson.SchemaBuilder(schema_uri=None)
-            for record in sample_records:
-                builder.add_object(self._coerce_types(record))
-            schema = builder.to_schema()
-            recursively_drop_required(schema)
-            make_properties_nullable(schema)
-            remove_null_only_properties(schema)
-            if not schema:
-                user_logger.error("Inferring schema failed.")
-                sys.exit(1)
-            else:
-                user_logger.info(f"Inferring schema successful for table: '{table_name}'.")
-        else:
-            user_logger.error(f"Strategy {strategy} not supported.")
+
+        builder = genson.SchemaBuilder(schema_uri=None)
+        for record in sample_records:
+            builder.add_object(self._coerce_types(record))
+        schema = builder.to_schema()
+
+        recursively_drop_required(schema)
+        make_properties_nullable(schema)
+        remove_null_only_properties(schema)
+
+        if not schema:
+            user_logger.error("Inferring schema failed.")
             sys.exit(1)
+        else:
+            user_logger.info(f"Inferring schema successful for table: '{table_name}'.")
+
         return schema
 
     def get_table_key_properties(self, table_name):
