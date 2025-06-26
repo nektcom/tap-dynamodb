@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import typing as t
@@ -93,18 +94,20 @@ class TableStream(Stream):
                     and self._schema["properties"][self.user_defined_replication_key]["type"] == "string"
                 ):
                     self._schema["properties"][self.user_defined_replication_key]["format"] = "date-time"
+
+                self._primary_keys = self._dynamodb_conn.get_table_key_properties(self._table_name)
             elif self.config.get("extraction_mode") == "envelope":
                 envelope_schema = th.PropertiesList(
-                    th.Property("_pk", th.StringType),
+                    th.Property("_hash_id", th.StringType),
                     th.Property("document", th.StringType),
                 )
 
                 if self.user_defined_replication_key:
                     envelope_schema.append(th.Property(self.user_defined_replication_key, th.DateTimeType))
 
+                self._primary_keys = ["_hash_id"]
                 self._schema = envelope_schema.to_dict()
 
-            self._primary_keys = self._dynamodb_conn.get_table_key_properties(self._table_name)
             self._replication_key = self.user_defined_replication_key
             self._replication_method = self.user_defined_replication_method
 
@@ -146,7 +149,13 @@ class TableStream(Stream):
     def process_record(self, record: dict) -> dict:
         if self.config.get("extraction_mode") == "envelope":
             processed_record = {
-                "_pk": record.get(self._primary_keys[0]),
+                "_hash_id": self.generate_hash(
+                    [
+                        record.get(key)
+                        for key in self._dynamodb_conn.get_table_key_properties(self._table_name)
+                        if record.get(key) is not None
+                    ]
+                ),
                 "document": record,
             }
 
@@ -156,3 +165,8 @@ class TableStream(Stream):
             processed_record = record
 
         return processed_record
+
+    def generate_hash(self, primary_keys: list[str]) -> str:
+        combined_string = "".join(map(str, primary_keys))
+        hash_object = hashlib.md5(combined_string.encode("utf-8"))
+        return hash_object.hexdigest()

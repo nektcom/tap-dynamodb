@@ -11,7 +11,7 @@ import orjson
 from botocore.exceptions import ClientError
 from mypy_boto3_dynamodb import DynamoDBClient, DynamoDBServiceResource
 from nekt_singer_sdk import typing as th
-from nekt_singer_sdk.custom_logger import user_logger
+from nekt_singer_sdk.custom_logger import internal_logger, user_logger
 
 from tap_dynamodb.connectors.aws_boto_connector import AWSBotoConnector
 from tap_dynamodb.schema_helper import (
@@ -38,6 +38,8 @@ boto3.dynamodb.types.TypeDeserializer.create_decimal = staticmethod(safe_create_
 
 class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient]):
     """DynamoDB connector class."""
+
+    dynamodb_table_primary_keys = []
 
     def __init__(
         self,
@@ -109,7 +111,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             if start_key:
                 scan_kwargs["ExclusiveStartKey"] = start_key
 
-            user_logger.info(f"Executing scan with parameters: {scan_kwargs}")
+            internal_logger.info(f"Executing scan with parameters: {scan_kwargs}")
 
             try:
                 response = table.scan(**scan_kwargs)
@@ -178,5 +180,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
 
     def get_table_key_properties(self, table_name):
         """Get the key properties for a table in DynamoDB."""
-        key_schema = self.resource.Table(table_name).key_schema
-        return [key.get("AttributeName") for key in key_schema]
+        if not self.dynamodb_table_primary_keys:
+            key_schema = self.resource.Table(table_name).key_schema
+            self.dynamodb_table_primary_keys = [key.get("AttributeName") for key in key_schema]
+        return self.dynamodb_table_primary_keys
