@@ -14,11 +14,7 @@ from nekt_singer_sdk import typing as th
 from nekt_singer_sdk.custom_logger import internal_logger, user_logger
 
 from tap_dynamodb.connectors.aws_boto_connector import AWSBotoConnector
-from tap_dynamodb.schema_helper import (
-    make_properties_nullable,
-    recursively_drop_required,
-    remove_null_only_properties,
-)
+from tap_dynamodb.schema_helper import cleanup_schema
 
 ## Monkey Patch
 
@@ -111,17 +107,17 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             if start_key:
                 scan_kwargs["ExclusiveStartKey"] = start_key
 
-            internal_logger.info(f"Executing scan with parameters: {scan_kwargs}")
+            internal_logger.info(f"[{table_name}]Executing scan with parameters: {scan_kwargs}")
 
             try:
                 response = table.scan(**scan_kwargs)
             except ClientError as err:
                 user_logger.error(
-                    f"Couldn't scan {table_name}. AWS Error: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
+                    f"[{table_name}] Couldn't scan {table_name}. AWS Error: {err.response['Error']['Code']}: {err.response['Error']['Message']}"
                 )
                 sys.exit(1)
             except Exception as e:
-                user_logger.error(f"Unexpected error during scan of {table_name}: {str(e)}")
+                user_logger.error(f"[{table_name}] Unexpected error during scan of {table_name}: {str(e)}")
                 sys.exit(1)
 
             items = response.get("Items", [])
@@ -130,8 +126,8 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
                 processed_items = [self._coerce_types(record) for record in items]
                 yield processed_items
             except Exception as e:
-                user_logger.error(f"Error processing items batch from {table_name}: {e}")
-                user_logger.error(f"First few raw items: {items[:2]}")
+                user_logger.error(f"[{table_name}] Error processing items batch from {table_name}: {e}")
+                user_logger.error(f"[{table_name}] First few raw items: {items[:2]}")
                 sys.exit(1)
 
             start_key = response.get("LastEvaluatedKey", None)
@@ -156,7 +152,7 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
         sample_records = self._get_sample_records(table_name, sample_size, scan_kwargs)
 
         if not sample_records:
-            user_logger.warning(f"No records found for table '{table_name}', generating empty schema.")
+            user_logger.warning(f"[{table_name}] No records found, generating empty schema.")
             self._primary_keys = self.get_table_key_properties(table_name)
             properties = [th.Property(key, th.StringType) for key in self._primary_keys]
             return th.PropertiesList(*properties).to_dict()
@@ -166,17 +162,16 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
             builder.add_object(self._coerce_types(record))
         schema = builder.to_schema()
 
-        recursively_drop_required(schema)
-        make_properties_nullable(schema)
-        remove_null_only_properties(schema)
+        final_schema = cleanup_schema(schema)
 
-        if not schema:
-            user_logger.error("Inferring schema failed.")
+        if not final_schema:
+            user_logger.error(f"[{table_name}] Inferring schema failed.")
             sys.exit(1)
         else:
-            user_logger.info(f"Inferring schema successful for table: '{table_name}'.")
+            user_logger.info(f"[{table_name}] Inferring schema successful for table: '{table_name}'.")
+            internal_logger.info(f"[{table_name}] Schema: {final_schema}")
 
-        return schema
+        return final_schema
 
     def get_table_key_properties(self, table_name):
         """Get the key properties for a table in DynamoDB."""

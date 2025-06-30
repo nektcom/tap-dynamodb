@@ -1,72 +1,87 @@
-def recursively_drop_required(schema: dict) -> None:
-    """Recursively drop the required property from a schema.
-
-    This is used to clean up genson generated schemas which are strict by default.
-
-    Args:
-        schema: The json schema.
-    """
-    schema.pop("required", None)
-    if "properties" in schema:
-        for prop in schema["properties"]:
-            if schema["properties"][prop].get("type") == "object":
-                recursively_drop_required(schema["properties"][prop])
+from typing import Any
 
 
-def make_properties_nullable(schema):
-    if isinstance(schema, dict):
-        # If this is a dictionary, iterate over its items
-        for key, value in schema.items():
-            # If the key is "type"
-            if key == "type":
-                if isinstance(value, list):
-                    # If "type" is a list, just append "null"
-                    if "null" not in value:
-                        value.append("null")
+def cleanup_schema(schema: Any) -> dict:
+    def remove_null_items(schema):
+        if isinstance(schema, dict):
+            # Remove 'required' key if it exists
+            schema.pop("required", None)
+
+            # If the schema is a list of nulls, fallback the type to a string
+            if schema.get("type") == ["null", "null"]:
+                return ["string", "null"]
+
+            # Remove only if { "type": "null" }, but not if it's part of a list
+            if schema.get("type") == "null":
+                return None  # Remove the entire schema entry if type is exactly null
+
+            # Recursively clean nested schemas
+            for key, value in list(schema.items()):
+                result = remove_null_items(value)
+                if result is None:
+                    schema.pop(key, None)  # Remove any fields that result in a 'None' value
                 else:
-                    # Skip it if type is actually a property in the schema
-                    if isinstance(value, dict):
-                        if "type" in value:
-                            value["type"] = [value["type"], "null"]
-                            continue
+                    schema[key] = result
+        elif isinstance(schema, list):
+            # Recursively clean for lists of schemas
+            schema[:] = [remove_null_items(item) for item in schema if remove_null_items(item) is not None]
 
-                    # If "type" is a single string, convert it to a list
-                    schema["type"] = [value, "null"]
-            else:
-                # Recursively process the value
-                make_properties_nullable(value)
-    elif isinstance(schema, list):
-        # If this is a list, recursively process each item
-        for item in schema:
-            make_properties_nullable(item)
+        return schema
 
+    def make_properties_nullable(schema):
+        if isinstance(schema, dict):
+            # If this is a dictionary, iterate over its items
+            for key, value in schema.items():
+                # If the key is "type"
+                if key == "type":
+                    if isinstance(value, list):
+                        # If "type" is a list, just append "null"
+                        if "null" not in value:
+                            value.append("null")
+                    else:
+                        # Skip it if type is actually a property in the schema
+                        if isinstance(value, dict):
+                            if "type" in value:
+                                value["type"] = [value["type"], "null"]
+                                continue
 
-def remove_null_only_properties(schema_node):
-    """Recursively remove properties that only have 'null' in their type list."""
-    if not isinstance(schema_node, dict):
-        return
+                        # If "type" is a single string, convert it to a list
+                        schema["type"] = [value, "null"]
+                else:
+                    # Recursively process the value
+                    make_properties_nullable(value)
+        elif isinstance(schema, list):
+            # If this is a list, recursively process each item
+            for item in schema:
+                make_properties_nullable(item)
 
-    if "properties" in schema_node and isinstance(schema_node["properties"], dict):
-        properties_to_delete = []
-        for prop_name, prop_schema in schema_node["properties"].items():
-            if isinstance(prop_schema, dict) and "type" in prop_schema:
-                prop_types = prop_schema.get("type")
-                # Handle cases where type is a list or a single string
-                if isinstance(prop_types, list):
-                    if all(t == "null" for t in prop_types):
-                        properties_to_delete.append(prop_name)
-                elif prop_types == "null":
-                    properties_to_delete.append(prop_name)
+        return schema
 
-            # Recurse into nested objects
-            remove_null_only_properties(prop_schema)
+    def remove_schema_ambiguity(schema):
+        if isinstance(schema, dict):
+            if "anyOf" in schema:
+                # Check if any of the items is of type "array"
+                array_type = next((item for item in schema["anyOf"] if item.get("type") == "array"), None)
 
-        for prop_name in properties_to_delete:
-            del schema_node["properties"][prop_name]
+                # If we found an array type, replace the anyOf with it
+                if array_type:
+                    return array_type
+                else:
+                    # If no array type is present, return the first item in anyOf
+                    return remove_schema_ambiguity(schema["anyOf"][0])
 
-        if "required" in schema_node and isinstance(schema_node["required"], list):
-            schema_node["required"] = [prop for prop in schema_node["required"] if prop not in properties_to_delete]
+            # Recursively process each key-value pair
+            return {key: remove_schema_ambiguity(value) for key, value in schema.items()}
 
-    # Handle array items
-    if "items" in schema_node and isinstance(schema_node["items"], dict):
-        remove_null_only_properties(schema_node["items"])
+        elif isinstance(schema, list):
+            # Recursively process each item in the list
+            return [remove_schema_ambiguity(item) for item in schema]
+
+        return schema
+
+    # Apply all transformations
+    schema = remove_null_items(schema)
+    schema = remove_schema_ambiguity(schema)
+    schema = make_properties_nullable(schema)
+
+    return schema
