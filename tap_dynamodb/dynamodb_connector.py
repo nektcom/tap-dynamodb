@@ -175,7 +175,6 @@ class DynamoDbConnector(AWSBotoConnector[DynamoDBServiceResource, DynamoDBClient
 
     def get_table_key_properties(self, table_name):
         """Get the key properties for a table in DynamoDB."""
-        if not self.dynamodb_table_primary_keys:
-            key_schema = self.resource.Table(table_name).key_schema
-            self.dynamodb_table_primary_keys = [key.get("AttributeName") for key in key_schema]
+        key_schema = self.resource.Table(table_name).key_schema
+        self.dynamodb_table_primary_keys = [key.get("AttributeName") for key in key_schema]
         return self.dynamodb_table_primary_keys

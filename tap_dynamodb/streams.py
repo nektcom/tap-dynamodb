@@ -111,7 +111,7 @@ class TableStream(Stream):
             self._replication_key = self.user_defined_replication_key
             self._replication_method = self.user_defined_replication_method
 
-            user_logger.info(f"Inferred schema: {self._schema}")
+            user_logger.info(f"[{self._table_name}] Inferred schema: {self._schema}")
         return self._schema
 
     def get_records(self, context: Context | None) -> Iterable[dict]:
@@ -150,11 +150,7 @@ class TableStream(Stream):
         if self.config.get("extraction_mode") == "envelope":
             processed_record = {
                 "_hash_id": self.generate_hash(
-                    [
-                        record.get(key)
-                        for key in self._dynamodb_conn.get_table_key_properties(self._table_name)
-                        if record.get(key) is not None
-                    ]
+                    [record.get(key) for key in self._primary_keys if record.get(key) is not None]
                 ),
                 "document": record,
             }
