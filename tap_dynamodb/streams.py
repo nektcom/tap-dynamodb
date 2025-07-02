@@ -6,6 +6,7 @@ import hashlib
 import json
 import sys
 import typing as t
+from functools import cached_property
 
 from boto3.dynamodb.types import TypeDeserializer
 from nekt_singer_sdk.custom_logger import user_logger
@@ -70,6 +71,10 @@ class TableStream(Stream):
                 sys.exit(1)
         else:
             super().__init__(name=name, tap=tap)
+
+    @cached_property
+    def dynamodb_primary_keys(self) -> list[str]:
+        return self._dynamodb_conn.get_table_key_properties(self._table_name)
 
     @property
     def schema(self) -> dict:
@@ -150,7 +155,7 @@ class TableStream(Stream):
         if self.config.get("extraction_mode") == "envelope":
             processed_record = {
                 "_hash_id": self.generate_hash(
-                    [record.get(key) for key in self._primary_keys if record.get(key) is not None]
+                    [record.get(key) for key in self.dynamodb_primary_keys if record.get(key) is not None]
                 ),
                 "document": record,
             }
