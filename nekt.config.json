@@ -1,0 +1,81 @@
+{
+    "meltano": {
+        "name": "tap-dynamodb",
+        "variant": "meltanolabs",
+        "pip_url": "-e ./extract/tap-dynamodb",
+        "namespace": "tap_dynamodb",
+        "executable": "tap-dynamodb",
+        "capabilities": [
+            "state",
+            "catalog",
+            "discover"
+        ]
+    },
+    "connectors": [
+        {
+            "connector_slug": "dynamodb",
+            "config_template": {
+                "type": "object",
+                "required": [
+                    "tables",
+                    "aws_assume_role_arn",
+                    "extraction_mode"
+                ],
+                "properties": {
+                    "tables": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "order": 1,
+                        "title": "Table names",
+                        "el_type": "extractor",
+                        "description": "The name of the DynamoDB tables you want to extract."
+                    },
+                    "aws_assume_role_arn": {
+                        "type": "string",
+                        "order": 2,
+                        "title": "Assume role ARN (AWS)",
+                        "el_type": "extractor",
+                        "description": "The ARN role to assume when running the source. Make sure this role has read access to the DynamoDB tables you listed above."
+                    },
+                    "extraction_mode": {
+                        "enum": [
+                            "envelope",
+                            "infer_schema"
+                        ],
+                        "type": "string",
+                        "order": 3,
+                        "title": "Extraction mode",
+                        "format": "dropdown",
+                        "default": "infer_schema",
+                        "el_type": "extractor",
+                        "description": "The extraction mode for the records. Envelope extracts all data as JSON and stores in a single column, while infer schema tries to infer a fixed schema based on a sample of records. Only use infer schema if the records in your table have consistent types and fields accross all documents.",
+                        "allowed_values": [
+                            {
+                                "label": "Envelope",
+                                "value": "envelope"
+                            },
+                            {
+                                "label": "Infer schema",
+                                "value": "infer_schema"
+                            }
+                        ]
+                    },
+                    "infer_schema_sample_size": {
+                        "type": "integer",
+                        "order": 4,
+                        "title": "Infer schema sample size",
+                        "default": 500,
+                        "el_type": "extractor",
+                        "dependent": "extraction_mode",
+                        "description": "The number of records to use for inferring the schema. Use a small number if you have a consistent schema and a large one if there's significant variability in the data.",
+                        "dependent_allowed_values": [
+                            "infer_schema"
+                        ]
+                    }
+                }
+            }
+        }
+    ]
+}
