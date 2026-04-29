@@ -1,8 +1,0 @@
-{
-  "name": "tap-dynamodb",
-  "variant": "meltanolabs",
-  "pip_url": "-e ./extract/tap-dynamodb",
-  "namespace": "tap_dynamodb",
-  "executable": "tap-dynamodb",
-  "capabilities": ["state", "catalog", "discover"]
-}

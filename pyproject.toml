@@ -1,36 +1,56 @@
-[tool.poetry]
-name = "tap-dynamodb"
+[project]
+name = "nekt-tap-dynamodb"
 version = "0.5.0"
 description = "`tap-dynamodb` is a Singer tap for DynamoDB, built with the Meltano Singer SDK."
 readme = "README.md"
-authors = ["Pat Nadolny"]
+authors = [{ name = "Pat Nadolny" }]
 keywords = [
     "ELT",
     "DynamoDB",
 ]
 license = "Apache-2.0"
-packages = [
-    { include = "tap_dynamodb" },
+license-files = ["LICENSE"]
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "nekt-singer-sdk @ git+https://github.com/nektcom/singer-sdk.git@v0.3.5",
+    "boto3>=1.37.12,<2.0.0",
+    "boto3-stubs[dynamodb,sts]~=1.35.35",
+    "genson~=1.3.0",
+    "orjson~=3.10.5",
+    "aws-assume-role-lib>=2.10.0,<3.0.0",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<4.0"
-boto3 = "~=1.35.35"
-boto3-stubs = {extras = ["dynamodb", "sts"], version = "~=1.35.35"}
-fs-s3fs = { version = "~=1.1.1", optional = true }
-genson = "~=1.3.0"
-orjson = "~=3.10.5"
-nekt-singer-sdk = {git = "https://github.com/nektcom/singer-sdk.git", rev = "v0.3.0"}
-aws-assume-role-lib = "^2.10.0"
+[project.optional-dependencies]
+s3 = [
+    "fs-s3fs~=1.1.1",
+]
 
-[tool.poetry.group.dev.dependencies]
-coverage = ">=7.5.4"
-moto = ">=5.0.10"
-mypy = ">=1.11.2"
-pytest = ">=8.2.2"
+[project.scripts]
+# CLI declaration
+tap-dynamodb = 'tap_dynamodb.tap:TapDynamoDB.cli'
 
-[tool.poetry.extras]
-s3 = ["fs-s3fs"]
+[dependency-groups]
+dev = [
+    { include-group = "test" },
+]
+test = [
+    "coverage>=7.5.4",
+    "moto>=5.0.10",
+    "pytest>=8.2.2",
+]
+typing = [
+    "mypy>=1.11.2",
+]
+
+[build-system]
+requires = ["hatchling>=1,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["tap_dynamodb"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -54,17 +74,9 @@ ignore = []
     "F401",  # Imported but unused; consider removing, adding to `__all__`, or using a redundant alias
 ]
 
-[tool.coverage]
+[tool.coverage.run]
 source = ["tap_dynamodb/"]
 omit = ["*/.tox/*", "*/test/*"]
-
-[build-system]
-requires = ["poetry-core>=1.0.8"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.scripts]
-# CLI declaration
-tap-dynamodb = 'tap_dynamodb.tap:TapDynamoDB.cli'
 
 [tool.pytest.ini_options]
 filterwarnings = [
