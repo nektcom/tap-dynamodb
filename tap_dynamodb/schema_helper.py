@@ -57,6 +57,17 @@ def cleanup_schema(schema: Any) -> dict:
 
         return schema
 
+    def add_missing_array_items(schema):
+        if isinstance(schema, dict):
+            if schema.get("type") == "array" and "items" not in schema:
+                schema["items"] = {"type": "string"}
+            for value in schema.values():
+                add_missing_array_items(value)
+        elif isinstance(schema, list):
+            for item in schema:
+                add_missing_array_items(item)
+        return schema
+
     def remove_schema_ambiguity(schema):
         if isinstance(schema, dict):
             if "anyOf" in schema:
@@ -82,6 +93,7 @@ def cleanup_schema(schema: Any) -> dict:
     # Apply all transformations
     schema = remove_null_items(schema)
     schema = remove_schema_ambiguity(schema)
+    schema = add_missing_array_items(schema)
     schema = make_properties_nullable(schema)
 
     return schema
