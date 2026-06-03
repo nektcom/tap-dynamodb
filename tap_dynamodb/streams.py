@@ -147,20 +147,24 @@ class TableStream(Stream):
                 ":incremental_value": self.get_starting_replication_key_value(context)
             }
 
+        log_interval = 1000
+        next_log_at = log_interval
         try:
             for batch in self._dynamodb_conn.get_items_iter(
                 self._table_name,
                 self._table_scan_kwargs,
             ):
-                user_logger.info(f"Processing batch of {len(batch)} records for table {self._table_name}")
                 total_records += len(batch)
+                if total_records >= next_log_at:
+                    user_logger.info(f"[{self._table_name}] {total_records} records processed so far...")
+                    next_log_at = total_records + log_interval
                 for record in batch:
                     try:
                         yield self.process_record(record)
                     except Exception as e:
                         user_logger.error(f"Error processing individual record: {record}. Error details: {str(e)}")
                         sys.exit(1)
-            user_logger.info(f"Total records processed for table {self._table_name}: {total_records}")
+            user_logger.info(f"[{self._table_name}] Extraction finished. Total records processed: {total_records}")
         except Exception as e:
             user_logger.error(f"Error getting records for table {self._table_name}. Error details: {str(e)}")
             user_logger.error(f"Table scan kwargs: {self._table_scan_kwargs}")
