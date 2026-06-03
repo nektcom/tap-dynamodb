@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import sys
 import typing as t
+from decimal import Decimal
 from functools import cached_property
 
 from boto3.dynamodb.types import TypeDeserializer
@@ -20,6 +22,19 @@ if t.TYPE_CHECKING:
     from nekt_singer_sdk.tap_base import Tap
 
     from tap_dynamodb.dynamodb_connector import DynamoDbConnector
+
+
+def _serialize_dynamodb_value(obj: t.Any) -> t.Any:
+    """JSON serializer for DynamoDB types."""
+    if isinstance(obj, Decimal):
+        return int(obj) if obj == int(obj) else float(obj)
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    if isinstance(obj, set):
+        return list(obj)
+    if isinstance(obj, bytes):
+        return obj.decode("utf-8", errors="replace")
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 class TableStream(Stream):
@@ -157,7 +172,7 @@ class TableStream(Stream):
                 "_hash_id": self.generate_hash(
                     [record.get(key) for key in self.dynamodb_primary_keys if record.get(key) is not None]
                 ),
-                "document": record,
+                "document": json.dumps(record, default=_serialize_dynamodb_value),
             }
 
             if self.replication_key:
